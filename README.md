@@ -24,9 +24,8 @@ The dataset used in this analysis is stored in `data/raw/`. The cleaned dataset 
 
   ## Author
 
-Juliet Bu, Harvard College 2027
-Harvard University
-Department of Government 
-
+Juliet Bu, Harvard College 2027  
+Harvard University  
+Department of Government  
 This project was completed as part of coursework and reflects
 independent student work.
