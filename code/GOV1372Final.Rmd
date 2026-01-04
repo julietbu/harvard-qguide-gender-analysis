@@ -1,0 +1,366 @@
+---
+title: 'GOV 1372 Final Project: Gender Bias in the QGuide'
+author: "Juliet Bu"
+date: "December 12, 2025"
+output:
+  pdf_document: default
+  html_document:
+    df_print: paged
+  word_document: default
+urlcolor: blue
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(dplyr)
+library(stringr)
+library(GGally)
+library(tidyr)
+library(estimatr)
+library(stargazer)
+library(ggplot2)
+library(ggcorrplot)
+
+```
+
+The code below will clean the data by removing any observations where the course lecturer's gender is unknown. Additionally, we manually sort each department into a department type -- Arts/Humanities, Social Sciences, Science/Engineering Languages, and Miscellanious. 
+```{r}
+# Load the data
+qguide <- read_csv('2025springQ.csv')
+
+# Clean the data 
+# Drop any observations without a teacher gender coded in or with any other NA variables 
+qguide_clean <- subset(qguide, course_teacher_sex != "unknown")
+qguide_clean <- qguide_clean %>% drop_na(lecturer_score_mean, course_score_mean, sentiment_score_mean, gem_probability_mean, workload_score_mean, rec_score_mean)
+
+# Drop any observations with a response rate lower than 60% 
+qguide_clean <- qguide_clean %>% 
+  mutate(
+    response_rate = num_responded/num_students 
+  )
+
+qguide_clean <- qguide_clean %>%
+  filter(response_rate >= 0.6)
+
+# Drop any observations where lecturer score mean is 0
+qguide_clean <- qguide_clean %>%
+  filter(lecturer_score_mean != 0)
+
+# Label each course's department type based on its course code
+arts_hum <- c("AFRAMER", "AFVS", "ANCSTD", "CELTIC", "ANCSTD", "CLASARCH", "CLASPHIL", "CLS", "MEDGREEK", "MEDLATIN", "MODGRKST", "COMPLIT", "CHNSHIS", "CHNSLIT", "EAFM", "EASTD", "JAPNLIT", "KORHIST", "ENGLISH", "EMR", "SCAND", "HIST", "HAA", "HUMAN", "LING", "MEDVLSTD", "MES", "MUSIC", "ANE", "ISLAMCIV", "MODMDEST", "NEC", "PHIL", "RELIGION", "ROM", "RSRA", "SLAVIC", "TDM", "WOMGEN", "FOLKMYTH")
+social_sci <- c("ANTHRO", "ECON", "GOV", "HLTHPOL", "GHHP", "ESPP", "HISTSCI", "PSY", "SOC", "SOCIOL", "EDST")
+science_eng <- c("APCOMP", "APMTH", "APPHY", "ASTRON", "BPH", "BE", "BIOPHYS", "BIOSTAT", "CPB", "CHEM", "PHYSCI", "COMPSCI", "E", "SCIENCE", "ENG", "ESE", "HEB", "MATH", "BCMP", "CELLBIO", "DRB", "GENETIC", "HBTM", "IMMUN", "MICROBI", "NEUROBIO", "VIROLOGY", "MBB", "LIFESCI", "MCB", "NEURO", "OEB", "PHYSICS", "QSE", "STAT", "SCRB", "PHS")
+lang <- c("GREEK", "LATIN", "AFRIKAAN", "CHAGATAY", "CHNSE", "JAPAN", "KOREAN", "VIETNAM", "GERMAN", "SWEDISH", "ARABIC", "PERSIAN", "TURKISH", "FRENCH", "ITAL", "PORTUG", "SPANSH", "RUSS", "FT", "HIND", "TAM", "IGBO", "SWAHILI", "YORUBA", "ZULU")
+misc <- c("EXPOS", "GENED", "FYSEMR", "CE")
+
+qguide_clean <- qguide_clean%>%  
+  mutate(dept = str_extract(course_code, "^[A-Za-z]+"))
+
+qguide_clean <- qguide_clean %>% 
+  mutate(
+    dept_type = case_when(
+      dept %in% arts_hum    ~ "Arts/Humanities",
+      dept %in% social_sci  ~ "Social Sciences",
+      dept %in% science_eng ~ "Science/Engineering",
+      dept %in% lang   ~ "Languages",
+      dept %in% misc ~ "GenEds, Expos, and First-Year Seminars",
+      TRUE ~ "Other"   # or NA
+    )
+  )
+
+```
+
+The code below creates exploratory graphs and statistics of the data. 
+```{r}
+# Exploratory tables and graphs 
+# Count how many observations in cleaned dataset
+qguide_clean %>% 
+  nrow()
+
+# Distribution of variables
+
+# Distribution of lecturer scores
+ggplot(qguide_clean, aes(x = lecturer_score_mean)) +
+  geom_histogram(bins = 20, fill = "tomato", color = "black") +
+  labs(
+    title = "Distribution of Lecturer Scores",
+    x = "Lecturer Score",
+    y = "Count"
+  )
+
+# Distribution of course scores
+ggplot(qguide_clean, aes(x = course_score_mean)) +
+  geom_histogram(bins = 20, fill = "tomato", color = "black") +
+  labs(
+    title = "Distribution of Course Scores",
+    x = "Course Score",
+    y = "Count"
+  )
+
+# Distribution of sentiment scores
+ggplot(qguide_clean, aes(x = sentiment_score_mean)) +
+  geom_histogram(bins = 30, fill = "tomato", color = "black") +
+  labs(
+    title = "Distribution of Sentiment Scores",
+    x = "Sentiment Score",
+    y = "Count"
+  )
+
+# Distribution of gem probability
+ggplot(qguide_clean, aes(x = gem_probability_mean)) +
+  geom_histogram(bins = 30, fill = "tomato", color = "black") +
+  labs(
+    title = "Distribution of Gem Probability",
+    x = "Gem Probability",
+    y = "Count"
+  )
+
+# Distribution of rec scores
+ggplot(qguide_clean, aes(x = rec_score_mean)) +
+  geom_histogram(bins = 30, fill = "tomato", color = "black") +
+  labs(
+    title = "Distribution of Recommendation Score",
+    x = "Recommendation Score",
+    y = "Count"
+  )
+
+# Distribution of workload scores
+ggplot(qguide_clean, aes(x = workload_score_mean)) +
+  geom_histogram(bins = 30, fill = "tomato", color = "black") +
+  labs(
+    title = "Distribution of Workload Score",
+    x = "Workload Score",
+    y = "Count"
+  )
+
+# Numerical calculation of proportions
+qguide_clean %>%
+  count(course_teacher_sex) %>%
+  mutate(prop = n / sum(n))
+
+qguide_clean %>%
+  count(dept_type, course_teacher_sex) %>%
+  group_by(dept_type) %>% 
+  mutate(prop = n / sum(n))
+
+# Bar plot of gender proportions
+ggplot(qguide_clean, aes(x = course_teacher_sex)) +
+  geom_bar(aes(y = after_stat(prop), group = 1), fill = "steelblue", color = "black") +
+  labs(
+    title = "Proportion of Lecturer Gender Across Harvard",
+    x = "Gender",
+    y = "Proportion"
+  ) 
+
+# Bar plot of gender proportions by department type
+ggplot(qguide_clean, aes(x = course_teacher_sex)) +
+  geom_bar(aes(y = after_stat(prop), group = 1), fill = "steelblue", color = "black") +
+  facet_wrap(~ dept_type) +
+  labs(
+    title = "Proportion of Lecturer Gender by Department Type",
+    x = "Gender",
+    y = "Proportion"
+  ) 
+
+# Violin plot of lecturer score by department type
+ggplot(qguide_clean, aes(x = dept_type, y = lecturer_score_mean)) +
+  geom_violin(trim = FALSE) +
+  geom_jitter(width = 0.1, alpha = 0.6) +
+  labs(title = "Lecturer Mean Scores by Department Type") +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1)
+  )
+
+# Violin plot of course score by department type
+ggplot(qguide_clean, aes(x = dept_type, y = course_score_mean)) +
+  geom_violin(trim = FALSE) +
+  geom_jitter(width = 0.1, alpha = 0.6) +
+  labs(title = "Course Mean Scores by Department Type") +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1)
+  )
+
+# Correlation matrix of all variables of interest
+# Select the numeric variables of interest
+corr_vars <- qguide_clean %>%
+  select(
+    workload_score_mean,
+    course_score_mean,
+    sentiment_score_mean,
+    lecturer_score_mean,
+    rec_score_mean
+  )
+
+# Compute correlation matrix 
+corr_mat <- cor(corr_vars, use = "pairwise.complete.obs")
+
+# View numeric correlation matrix
+corr_mat
+
+# Plot correlation matrix 
+ggcorrplot(
+  corr_mat,
+  type = "lower",
+  lab = TRUE,
+  lab_size = 3,
+  hc.order = TRUE
+) +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1)
+  ) +
+  ggtitle("Correlation Matrix")
+```
+After conducting initial data exploration, the below portion runs the relevant regression analysis. 
+```{r}
+# Regression 1: Gender on Lecturer Score 
+fullmodel1 <- lm(lecturer_score_mean ~ course_teacher_sex + 
+                   dept_type + 
+                   sentiment_score_mean +
+                   course_score_mean +
+                   workload_score_mean,
+                 data = qguide_clean)
+
+summary(fullmodel1)
+
+
+# Regression 2: Gender on Course Score
+fullmodel2 <- lm(course_score_mean ~ course_teacher_sex + 
+                   sentiment_score_mean +
+                   dept_type +
+                   workload_score_mean + 
+                   lecturer_score_mean, 
+                 data = qguide_clean)
+
+summary(fullmodel2)
+
+# Regression 3: 
+fullmodel3 <- lm(lecturer_score_mean ~ course_teacher_sex * dept_type +
+                          workload_score_mean +
+                          course_score_mean +
+                          sentiment_score_mean,
+                        data = qguide_clean)
+
+summary(fullmodel3)
+
+# Output all three regressions using stargazer 
+stargazer(fullmodel1, fullmodel2, fullmodel3, 
+          type = "text",
+          title = "Regression Results",
+          column.labels = c("Lecturer Score", "Course Score", "Lecturer Score by Department"))
+
+# Regression 1, progressive controls analysis
+
+# Model 1a: Gender only (no controls)
+model1a <- lm(lecturer_score_mean ~ course_teacher_sex, 
+              data = qguide_clean)
+
+# Model 1b: Gender + Dept Type
+model1b <- lm(lecturer_score_mean ~ course_teacher_sex +
+                dept_type,
+              data = qguide_clean)
+
+# Model 1c: Gender + Dept Type + Sentiment Score
+model1c <- lm(lecturer_score_mean ~ course_teacher_sex +
+                dept_type +
+                sentiment_score_mean,
+              data = qguide_clean)
+
+# Model 1d: Gender + Dept Type + Sentiment Score + Course Score 
+model1d <- lm(lecturer_score_mean ~ course_teacher_sex + 
+                dept_type + 
+                sentiment_score_mean +
+                course_score_mean,
+              data = qguide_clean)
+
+# View all Model 1 specifications
+summary(model1a)
+summary(model1b)
+summary(model1c)
+summary(model1d)
+summary(fullmodel1)
+
+# Compare all Lecturer Score models
+stargazer(model1a, model1b, model1c, model1d, fullmodel1,
+          type = "text",
+          title = "Lecturer Score Regressions: Progressive Controls",
+          column.labels = c("No Controls", "+Department", "+Sentiment Score", "+Course Score", "Full"),
+          keep.stat = c("n", "rsq"))
+
+
+# Regression 2, progressive controls analysis
+
+# Model 2a: Gender only (no controls)
+model2a <- lm(course_score_mean ~ course_teacher_sex, 
+              data = qguide_clean)
+
+# Model 2b: Gender + Lecturer Score
+model2b <- lm(course_score_mean ~ course_teacher_sex + 
+                lecturer_score_mean,
+              data = qguide_clean)
+
+# Model 2c: Gender + Lecturer Score + Sentiment Score
+model2c <- lm(course_score_mean ~ course_teacher_sex + 
+                lecturer_score_mean + 
+                sentiment_score_mean, 
+              data = qguide_clean)
+
+# Model 2d: Gender + Lecturer Score + Sentiment Score + Department
+model2d <- lm(course_score_mean ~ course_teacher_sex + 
+                lecturer_score_mean + 
+                sentiment_score_mean +
+                dept_type, 
+              data = qguide_clean)
+
+# View all Model 2 specifications
+summary(model2a)
+summary(model2b)
+summary(model2c)
+summary(model2d)
+summary(fullmodel2)
+
+stargazer(model2a, model2b, model2c, model2d, fullmodel2, 
+          type = "text",
+          title = "Course Score Regressions: Progressive Controls",
+          column.labels = c("No Controls", "+Lecturer Score", "+Sentiment", "+Department", "Full"),
+          keep.stat = c("n", "rsq"))
+
+# Regression 3, progressive controls analysis
+
+# Model 3a: Gender only (no controls)
+model3a <- lm(lecturer_score_mean ~ course_teacher_sex * dept_type, 
+              data = qguide_clean)
+
+# Model 3b: Gender + Course Score
+model3b <- lm(lecturer_score_mean ~ course_teacher_sex * dept_type + 
+               course_score_mean,
+              data = qguide_clean)
+
+# Model 3c: Gender + Course Score + Sentiment Score
+model3c <- lm(lecturer_score_mean ~ course_teacher_sex * dept_type + 
+               course_score_mean +
+                sentiment_score_mean,
+              data = qguide_clean)
+
+# Model 3c: Gender + Course Score + Sentiment Score + Department
+model3d <- lm(lecturer_score_mean ~ course_teacher_sex * dept_type + 
+               course_score_mean +
+                sentiment_score_mean +
+                dept_type,
+              data = qguide_clean)
+
+# View all Model 3 specifications
+summary(model3a)
+summary(model3b)
+summary(model3c)
+summary(model3d)
+summary(fullmodel3)
+
+stargazer(model3a, model3b, model3c, model3d, fullmodel3, 
+          type = "text",
+          title = "Lecturer Scores by Department Type Regressions: Progressive Controls",
+          column.labels = c("No Controls", "+Course Score", "+Sentiment Score", "+Department", "Full"),
+          keep.stat = c("n", "rsq"))
+
+
+```
